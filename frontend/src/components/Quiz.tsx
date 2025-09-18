@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { quizApi } from '../services/api';
-import type { Question, GradeResponse, QuizResult } from '../types';
+import type { Question, GradeResponse } from '../types';
 
 const Quiz: React.FC = () => {
   const [searchParams] = useSearchParams();
