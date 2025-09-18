@@ -312,20 +312,20 @@ const Quiz: React.FC = () => {
               ← Câu trước
             </button>
 
-            <div className="flex space-x-2">
-              {questions.map((_, index) => (
+            <div className="flex flex-wrap gap-2 justify-center mt-6">
+              {questions.map((q, i) => (
                 <button
-                  key={index}
-                  onClick={() => setCurrentQuestionIndex(index)}
-                  className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${
-                    index === currentQuestionIndex
-                      ? 'bg-blue-600 text-white'
-                      : answers[questions[index].id] !== undefined
+                  key={i}
+                  onClick={() => setCurrentQuestionIndex(i)}
+                  className={`w-10 h-10 rounded-full text-sm flex items-center justify-center transition-colors ${
+                    i === currentQuestionIndex
+                      ? 'bg-purple-600 text-white'
+                      : answers[q.id] !== undefined
                       ? 'bg-green-500 text-white'
                       : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                   }`}
                 >
-                  {index + 1}
+                  {i + 1}
                 </button>
               ))}
             </div>
