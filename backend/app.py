@@ -17,7 +17,9 @@ def load_questions_from_excel():
     """Load questions from Excel file and parse into standardized format"""
     global QUESTIONS_DATA, MODULES
     
-    excel_file = "/home/trungdt2/Documents/quizz_project/Quyhoach_ModuleCDS.xlsx"
+    # Resolve Excel file relative to project root for portability (e.g., Render)
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    excel_file = os.path.join(project_root, "Quyhoach_ModuleCDS.xlsx")
     
     try:
         df = pd.read_excel(excel_file, sheet_name="Quizizz Sample")
@@ -230,4 +232,5 @@ def health_check():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
