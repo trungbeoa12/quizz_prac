@@ -19,4 +19,4 @@ services:
     routes:
       - type: rewrite
         source: /api/*
-        destination: https://quizz-backend.onrender.com/api/:splat
+        destination: https://quizz-backend-REPLACE-ME.onrender.com/api/:splat
