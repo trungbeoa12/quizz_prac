@@ -11,7 +11,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11
 
-  - type: static_site
+  - type: static
     name: quizz-frontend
     plan: free
     rootDir: frontend
@@ -22,4 +22,4 @@ services:
         fromService:
           type: web
           name: quizz-backend
-          property: host
+          property: url
