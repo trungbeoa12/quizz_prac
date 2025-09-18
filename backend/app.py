@@ -223,13 +223,9 @@ def grade_quiz():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
-def health_check():
+def health():
     """Health check endpoint"""
-    return jsonify({
-        "status": "healthy",
-        "total_questions": len(QUESTIONS_DATA),
-        "modules": len(MODULES)
-    })
+    return {"status": "ok"}, 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
