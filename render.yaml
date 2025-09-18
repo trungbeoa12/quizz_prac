@@ -11,14 +11,14 @@ services:
       - key: PYTHON_VERSION
         value: 3.11
 
-  - type: static
+  - type: static_site
     name: quizz-frontend
     plan: free
     rootDir: frontend
     buildCommand: npm ci && npm run build
-    staticPublishPath: build
+    staticPublishPath: dist
     envVars:
-      - key: REACT_APP_API_BASE_URL
+      - key: VITE_API_BASE_URL
         fromService:
           type: web
           name: quizz-backend
