@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { quizApi } from '../services/api';
 
@@ -19,7 +19,7 @@ const Home: React.FC = () => {
       try {
         setLoading(true);
         const response = await quizApi.getModules();
-        const moduleList = response.modules.map((module: string, index: number) => ({
+        const moduleList = response.modules.map((module: string, _: number) => ({
           name: module,
           id: module,
         }));

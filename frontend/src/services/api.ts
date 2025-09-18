@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Question, GradeResponse } from '../types';
+import type { Question, GradeResponse } from '../types';
 
 // Use env var if provided, else default to relative '/api' for Render static rewrite
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api';
