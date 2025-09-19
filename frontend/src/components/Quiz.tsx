@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { quizApi } from '../services/api';
-import type { Question, GradeResponse } from '../types';
+import { quizApi, fetchModules } from '../services/api';
+import type { Question } from '../types';
 
 const Quiz: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -11,6 +11,7 @@ const Quiz: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [moduleValid, setModuleValid] = useState<boolean | null>(null);
   
   // Per-question state
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -22,20 +23,35 @@ const Quiz: React.FC = () => {
   const seed = parseInt(searchParams.get('seed') || '0');
 
   useEffect(() => {
-    const fetchQuestions = async () => {
+    const loadQuiz = async () => {
       try {
         setLoading(true);
+        setError(null);
+        
+        // First validate module exists
+        if (module !== 'all') {
+          const modulesResponse = await fetchModules();
+          const validModules = modulesResponse.modules.map((m: any) => m.id);
+          if (!validModules.includes(module)) {
+            setError(`Module không tồn tại: ${module}`);
+            setModuleValid(false);
+            return;
+          }
+        }
+        
+        setModuleValid(true);
         const response = await quizApi.getQuestions(module, seed);
         setQuestions(response.questions);
       } catch (err) {
-        setError('Không thể tải câu hỏi. Vui lòng thử lại.');
-        console.error('Error fetching questions:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(`Không thể tải câu hỏi: ${errorMessage}`);
+        console.error('Error loading quiz:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchQuestions();
+    loadQuiz();
   }, [module, seed]);
 
   // Reset question state when changing questions
@@ -144,14 +160,26 @@ const Quiz: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-pink-100 flex items-center justify-center">
         <div className="bg-white p-8 rounded-lg shadow-lg max-w-md mx-auto">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Lỗi</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={handleBackToHome}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
-          >
-            Về trang chủ
-          </button>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            {moduleValid === false ? 'Module không tồn tại' : 'Lỗi'}
+          </h2>
+          <p className="text-red-700 mb-4">{error}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleBackToHome}
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+            >
+              Về trang chủ
+            </button>
+            {moduleValid === false && (
+              <button
+                onClick={handleRetry}
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+              >
+                Thử lại
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -300,7 +328,7 @@ const Quiz: React.FC = () => {
             </button>
 
             <div className="flex flex-wrap gap-2 justify-center">
-              {questions.map((q, i) => (
+              {questions.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => {

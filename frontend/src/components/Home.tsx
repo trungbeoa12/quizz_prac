@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { quizApi } from '../services/api';
+import { fetchModules } from '../services/api';
 
 interface Module {
   name: string;
   id: string;
+  total: number;
 }
 
 const Home: React.FC = () => {
@@ -15,24 +16,34 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchModules = async () => {
+    const loadModules = async () => {
       try {
         setLoading(true);
-        const response = await quizApi.getModules();
-        const moduleList = response.modules.map((module: string, _: number) => ({
-          name: module,
-          id: module,
+        setError(null);
+        const response = await fetchModules();
+        
+        // Validate response structure
+        if (!response || !Array.isArray(response.modules)) {
+          throw new Error('Invalid response format from server');
+        }
+        
+        const moduleList = response.modules.map((module: any) => ({
+          name: module.name || 'Unknown Module',
+          id: module.id || 'unknown',
+          total: module.total || 0,
         }));
+        
         setModules(moduleList);
       } catch (err) {
-        setError('Không thể tải danh sách module. Vui lòng kiểm tra kết nối backend.');
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(`Không tải được danh sách module: ${errorMessage}`);
         console.error('Error fetching modules:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchModules();
+    loadModules();
   }, []);
 
   const handleStartQuiz = () => {
@@ -58,13 +69,25 @@ const Home: React.FC = () => {
         <div className="bg-white p-8 rounded-lg shadow-lg max-w-md mx-auto">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
           <h2 className="text-xl font-bold text-gray-800 mb-4">Lỗi kết nối</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
+          <p className="text-red-700 mb-4">{error}</p>
           <button
             onClick={() => window.location.reload()}
             className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
           >
             Thử lại
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!modules.length) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md mx-auto text-center">
+          <div className="text-gray-500 text-6xl mb-4">📚</div>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Chưa có module nào</h2>
+          <p className="text-gray-600">Vui lòng kiểm tra lại cấu hình backend.</p>
         </div>
       </div>
     );
@@ -120,7 +143,9 @@ const Home: React.FC = () => {
                   />
                   <div>
                     <div className="font-medium text-gray-800">{module.name}</div>
-                    <div className="text-sm text-gray-500">Làm bài thi module {module.name}</div>
+                    <div className="text-sm text-gray-500">
+                      Làm bài thi module {module.name} ({module.total} câu hỏi)
+                    </div>
                   </div>
                 </label>
               ))}

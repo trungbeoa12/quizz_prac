@@ -2,34 +2,57 @@ import axios from "axios";
 import type { GradeResponse } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
-export const api = axios.create({ baseURL: `${API_BASE}/api`, timeout: 60000 });
+export const api = axios.create({ 
+  baseURL: API_BASE ? `${API_BASE}/api` : '/api', 
+  timeout: 60000 
+});
 
 export async function fetchModules() { 
-  const r = await api.get("/modules"); 
-  return r.data; 
+  try {
+    const r = await api.get("/modules"); 
+    return r.data; 
+  } catch (error) {
+    console.error('Error fetching modules:', error);
+    throw error;
+  }
 }
 
 export async function fetchQuestions(module: string = 'all', seed?: number) {
-  const params: { module: string; seed?: number } = { module };
-  if (seed !== undefined) {
-    params.seed = seed;
+  try {
+    const params: { module: string; seed?: number } = { module };
+    if (seed !== undefined) {
+      params.seed = seed;
+    }
+    const r = await api.get('/questions', { params });
+    return r.data;
+  } catch (error) {
+    console.error('Error fetching questions:', error);
+    throw error;
   }
-  const r = await api.get('/questions', { params });
-  return r.data;
 }
 
 export async function gradeQuiz(answers: Record<string, number | number[]>, module: string, seed?: number) {
-  const r = await api.post('/grade', {
-    answers,
-    module,
-    seed,
-  });
-  return r.data as GradeResponse;
+  try {
+    const r = await api.post('/grade', {
+      answers,
+      module,
+      seed,
+    });
+    return r.data as GradeResponse;
+  } catch (error) {
+    console.error('Error grading quiz:', error);
+    throw error;
+  }
 }
 
 export async function healthCheck() {
-  const r = await api.get('/health');
-  return r.data;
+  try {
+    const r = await api.get('/health');
+    return r.data;
+  } catch (error) {
+    console.error('Error checking health:', error);
+    throw error;
+  }
 }
 
 // Legacy export for backward compatibility
