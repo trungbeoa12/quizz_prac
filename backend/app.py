@@ -5,13 +5,13 @@ import random
 import json
 import os
 from typing import List, Dict, Any
+from .dataloader import load_all_modules
 
 app = Flask(__name__)
 CORS(app)
 
-# Load questions data
-QUESTIONS_DATA = []
-MODULES = []
+# In-memory DB for modules
+IN_MEMORY_DB = {}
 
 def load_questions_from_excel():
     """Load questions from Excel file and parse into standardized format"""
@@ -123,16 +123,26 @@ def get_shuffled_questions(module_filter: str = "all", seed: int = None) -> List
     
     return shuffled_questions
 
-# Initialize data on startup
+# Initialize data on startup (legacy single file loader)
 load_questions_from_excel()
+
+# Load all modules from multiple files
+try:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    data_dir = os.path.join(repo_root, "backend", "data")
+    IN_MEMORY_DB = load_all_modules([repo_root, data_dir])
+    print(f"Loaded modules: {list(IN_MEMORY_DB.keys())}")
+except Exception as e:
+    print(f"Module load error: {e}")
 
 @app.route('/api/modules', methods=['GET'])
 def get_modules():
     """Get list of available modules"""
-    return jsonify({
-        "modules": MODULES,
-        "total": len(MODULES)
-    })
+    if IN_MEMORY_DB:
+        modules = [{"id": m[0], "name": m[1]["name"], "total": m[1]["total"]} for m in IN_MEMORY_DB.items()]
+        return jsonify({"modules": modules, "total": len(modules)})
+    # fallback legacy
+    return jsonify({"modules": MODULES, "total": len(MODULES)})
 
 @app.route('/api/questions', methods=['GET'])
 def get_questions():
@@ -140,6 +150,32 @@ def get_questions():
     module = request.args.get('module', 'all')
     seed = request.args.get('seed', type=int)
     
+    # If using multi-module DB
+    if IN_MEMORY_DB and module != 'all' and module in IN_MEMORY_DB:
+        questions_raw = IN_MEMORY_DB[module]["questions"]
+        questions = questions_raw.copy()
+        if seed is not None:
+            random.seed(seed)
+            random.shuffle(questions)
+        # conform to existing client fields
+        questions_for_client = []
+        for q in questions:
+            client_question = {
+                "id": q["id"],
+                "module": IN_MEMORY_DB[module]["name"],
+                "text": q["text"],
+                "options": q["options"],
+                "correctIndexes": q["correct"],
+                "explanation": q.get("explanation") or ""
+            }
+            questions_for_client.append(client_question)
+        return jsonify({
+            "questions": questions_for_client,
+            "total": len(questions_for_client),
+            "module": module,
+            "seed": seed
+        })
+
     questions = get_shuffled_questions(module, seed)
     
     # Include correctIndexes for immediate result checking
@@ -227,7 +263,15 @@ def grade_quiz():
 @app.route('/api/health', methods=['GET'])
 def health():
     """Health check endpoint"""
-    return {"status": "ok"}, 200
+    total_questions = 0
+    modules_count = 0
+    if IN_MEMORY_DB:
+        modules_count = len(IN_MEMORY_DB)
+        total_questions = sum(m["total"] for m in IN_MEMORY_DB.values())
+    else:
+        total_questions = len(QUESTIONS_DATA)
+        modules_count = len(MODULES)
+    return {"status": "ok", "modules": modules_count, "total_questions": total_questions}, 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
