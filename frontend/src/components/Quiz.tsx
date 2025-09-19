@@ -8,12 +8,15 @@ const Quiz: React.FC = () => {
   const navigate = useNavigate();
   
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [questionResults, setQuestionResults] = useState<Record<string, any>>({});
   const [error, setError] = useState<string | null>(null);
+  
+  // Per-question state
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [graded, setGraded] = useState(false);
+  const [result, setResult] = useState<{isCorrect: boolean, correct: number[]} | null>(null);
+  const [answeredCount, setAnsweredCount] = useState(0);
 
   const module = searchParams.get('module') || 'all';
   const seed = parseInt(searchParams.get('seed') || '0');
@@ -35,64 +38,81 @@ const Quiz: React.FC = () => {
     fetchQuestions();
   }, [module, seed]);
 
-  const checkQuestionResult = (questionId: string, userAnswers: number[]) => {
-    const question = questions.find(q => q.id === questionId);
-    if (!question) return null;
+  // Reset question state when changing questions
+  useEffect(() => {
+    resetQuestionState();
+  }, [currentQuestionIndex]);
 
-    // Get correct answers from the question data
-    const correctAnswers = question.correctIndexes || [];
-    
-    // Compare user answers with correct answers
-    const isCorrect = JSON.stringify([...userAnswers].sort()) === JSON.stringify([...correctAnswers].sort());
-    
-    return {
-      isCorrect,
-      userAnswer: userAnswers,
-      correctAnswer: correctAnswers,
-      explanation: question.explanation || "Đáp án đúng: " + correctAnswers.map(i => String.fromCharCode(65 + i)).join(", ")
-    };
+  // Helper functions
+  const isEqualSet = (a: Set<number>, b: Set<number>) => {
+    if (a.size !== b.size) return false;
+    for (const x of a) if (!b.has(x)) return false;
+    return true;
   };
 
-  const handleToggleAnswer = (questionId: string, answerIndex: number) => {
-    setAnswers(prev => {
-      const existing = prev[questionId] || [];
-      const exists = existing.includes(answerIndex);
-      const next = exists ? existing.filter(i => i !== answerIndex) : [...existing, answerIndex];
-      // Keep sorted for stable comparison/UI
-      next.sort((a, b) => a - b);
-      
-      // Check result immediately after answer change
-      const result = checkQuestionResult(questionId, next);
-      if (result) {
-        setQuestionResults(prev => ({
-          ...prev,
-          [questionId]: result
-        }));
-      }
-      
-      return { ...prev, [questionId]: next };
-    });
+  const gradeQuestion = (correct: number[], selected: Set<number>) => {
+    const ok = isEqualSet(new Set(correct), selected);
+    return { isCorrect: ok, correct };
+  };
+
+  const toggleOption = (idx: number) => {
+    if (graded) return;
+    
+    const currentQuestion = questions[currentQuestionIndex];
+    const isMulti = currentQuestion.correctIndexes.length > 1;
+    
+    if (isMulti) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(idx)) next.delete(idx); else next.add(idx);
+        return next;
+      });
+    } else {
+      setSelected(new Set([idx]));
+    }
+  };
+
+  const resetQuestionState = () => {
+    setSelected(new Set());
+    setGraded(false);
+    setResult(null);
   };
 
   const handleNext = () => {
+    if (!graded) {
+      // Grade current question
+      const currentQuestion = questions[currentQuestionIndex];
+      const r = gradeQuestion(currentQuestion.correctIndexes, selected);
+      setResult(r);
+      setGraded(true);
+      
+      // Increment answered count if this is first time grading
+      if (answeredCount === currentQuestionIndex) {
+        setAnsweredCount(prev => prev + 1);
+      }
+      return;
+    }
+    
+    // Move to next question
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
+      resetQuestionState();
     }
   };
 
   const handlePrevious = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
+      resetQuestionState();
     }
   };
 
   const handleFinish = () => {
     // Calculate final score
     const totalQuestions = questions.length;
-    const correctAnswers = Object.values(questionResults).filter((result: any) => result.isCorrect).length;
-    const percentage = Math.round((correctAnswers / totalQuestions) * 100);
+    const percentage = Math.round((answeredCount / totalQuestions) * 100);
     
-    alert(`Bài thi hoàn thành!\nKết quả: ${correctAnswers}/${totalQuestions} (${percentage}%)\n${percentage >= 70 ? 'Chúc mừng! Bạn đã vượt qua!' : 'Cần cố gắng thêm nhé!'}`);
+    alert(`Bài thi hoàn thành!\nKết quả: ${answeredCount}/${totalQuestions} (${percentage}%)\n${percentage >= 70 ? 'Chúc mừng! Bạn đã vượt qua!' : 'Cần cố gắng thêm nhé!'}`);
     
     // Navigate back to home
     navigate('/');
@@ -158,7 +178,6 @@ const Quiz: React.FC = () => {
 
   // Show quiz interface
   const currentQuestion = questions[currentQuestionIndex];
-  const answeredQuestions = Object.keys(answers).length;
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
   return (
@@ -183,7 +202,7 @@ const Quiz: React.FC = () => {
             <div className="mb-4">
               <div className="flex justify-between text-sm text-gray-600 mb-2">
                 <span>Câu {currentQuestionIndex + 1} / {questions.length}</span>
-                <span>Đã trả lời: {answeredQuestions}/{questions.length}</span>
+                <span>Đã trả lời: {answeredCount}/{questions.length}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div 
@@ -202,38 +221,42 @@ const Quiz: React.FC = () => {
 
             <div className="space-y-3">
               {currentQuestion.options.map((option, index) => {
-                const currentResult = questionResults[currentQuestion.id];
-                const isUserSelected = (answers[currentQuestion.id] || []).includes(index);
-                const isCorrectAnswer = currentResult?.correctAnswer?.includes(index);
-                const isWrongAnswer = currentResult && !currentResult.isCorrect && isUserSelected && !isCorrectAnswer;
+                const isUserSelected = selected.has(index);
+                const isCorrectAnswer = result?.correct.includes(index);
+                const isWrongAnswer = graded && isUserSelected && !isCorrectAnswer;
                 
                 let optionClasses = "flex items-center p-4 border rounded-lg transition-colors";
-                if (currentResult) {
-                  if (isCorrectAnswer) {
-                    optionClasses += " bg-green-200 text-green-800 border-green-300";
-                  } else if (isWrongAnswer) {
-                    optionClasses += " bg-red-200 text-red-800 border-red-300";
-                  } else {
-                    optionClasses += " bg-gray-50 text-gray-700 border-gray-200";
-                  }
-                } else {
+                
+                if (!graded) {
                   optionClasses += isUserSelected 
                     ? " border-blue-500 bg-blue-50 cursor-pointer hover:bg-blue-100"
                     : " border-gray-200 hover:bg-gray-50 cursor-pointer";
+                } else {
+                  if (isCorrectAnswer) {
+                    optionClasses += " bg-green-100 text-green-800 border-green-400";
+                  } else if (isWrongAnswer) {
+                    optionClasses += " bg-red-100 text-red-800 border-red-400";
+                  } else {
+                    optionClasses += " bg-white text-gray-700 border-gray-200";
+                  }
                 }
+
+                const isMulti = currentQuestion.correctIndexes.length > 1;
+                const inputType = isMulti ? "checkbox" : "radio";
 
                 return (
                   <label
                     key={index}
                     className={optionClasses}
+                    onClick={() => toggleOption(index)}
                   >
                     <input
-                      type="checkbox"
+                      type={inputType}
                       name={`question-${currentQuestion.id}`}
                       value={index}
                       checked={isUserSelected}
-                      onChange={() => handleToggleAnswer(currentQuestion.id, index)}
-                      disabled={!!currentResult}
+                      onChange={() => toggleOption(index)}
+                      disabled={graded}
                       className="mr-4 h-5 w-5 text-blue-600"
                     />
                     <span className="font-medium text-gray-800 mr-2">
@@ -245,21 +268,23 @@ const Quiz: React.FC = () => {
               })}
             </div>
 
-            {/* Show immediate result */}
-            {questionResults[currentQuestion.id] && (
+            {/* Show result after grading */}
+            {graded && result && (
               <div className="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
                 <div className="flex items-center mb-2">
                   <span className={`text-lg font-medium ${
-                    questionResults[currentQuestion.id].isCorrect 
+                    result.isCorrect 
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    {questionResults[currentQuestion.id].isCorrect ? '✅ Đúng!' : '❌ Sai!'}
+                    {result.isCorrect ? '✅ Đúng!' : '❌ Sai!'}
                   </span>
                 </div>
-                <div className="text-sm text-gray-700">
-                  <strong>Giải thích:</strong> {questionResults[currentQuestion.id].explanation}
-                </div>
+                {currentQuestion.explanation && (
+                  <div className="text-sm text-gray-700">
+                    <strong>Giải thích:</strong> {currentQuestion.explanation}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -278,14 +303,15 @@ const Quiz: React.FC = () => {
               {questions.map((q, i) => (
                 <button
                   key={i}
-                  onClick={() => setCurrentQuestionIndex(i)}
+                  onClick={() => {
+                    setCurrentQuestionIndex(i);
+                    resetQuestionState();
+                  }}
                   className={`w-10 h-10 rounded-full text-sm flex items-center justify-center transition-colors ${
                     i === currentQuestionIndex
                       ? 'bg-purple-600 text-white'
-                      : questionResults[q.id]
-                      ? questionResults[q.id].isCorrect
-                        ? 'bg-green-500 text-white'
-                        : 'bg-red-500 text-white'
+                      : i < answeredCount
+                      ? 'bg-green-500 text-white'
                       : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                   }`}
                 >
@@ -306,7 +332,7 @@ const Quiz: React.FC = () => {
                 onClick={handleNext}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
-                Câu tiếp →
+                {!graded ? 'Chấm câu này' : 'Câu tiếp →'}
               </button>
             )}
           </div>
