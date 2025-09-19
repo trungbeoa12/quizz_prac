@@ -142,14 +142,16 @@ def get_questions():
     
     questions = get_shuffled_questions(module, seed)
     
-    # Remove correctIndexes from response for security
+    # Include correctIndexes for immediate result checking
     questions_for_client = []
     for q in questions:
         client_question = {
             "id": q["id"],
             "module": q["module"],
             "text": q["text"],
-            "options": q["options"]
+            "options": q["options"],
+            "correctIndexes": q["correctIndexes"],
+            "explanation": q["explanation"]
         }
         questions_for_client.append(client_question)
     

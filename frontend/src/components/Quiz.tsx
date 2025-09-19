@@ -12,7 +12,7 @@ const Quiz: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [quizResults, setQuizResults] = useState<GradeResponse | null>(null);
+  const [questionResults, setQuestionResults] = useState<Record<string, any>>({});
   const [error, setError] = useState<string | null>(null);
 
   const module = searchParams.get('module') || 'all';
@@ -35,6 +35,24 @@ const Quiz: React.FC = () => {
     fetchQuestions();
   }, [module, seed]);
 
+  const checkQuestionResult = (questionId: string, userAnswers: number[]) => {
+    const question = questions.find(q => q.id === questionId);
+    if (!question) return null;
+
+    // Get correct answers from the question data
+    const correctAnswers = question.correctIndexes || [];
+    
+    // Compare user answers with correct answers
+    const isCorrect = JSON.stringify([...userAnswers].sort()) === JSON.stringify([...correctAnswers].sort());
+    
+    return {
+      isCorrect,
+      userAnswer: userAnswers,
+      correctAnswer: correctAnswers,
+      explanation: question.explanation || "Đáp án đúng: " + correctAnswers.map(i => String.fromCharCode(65 + i)).join(", ")
+    };
+  };
+
   const handleToggleAnswer = (questionId: string, answerIndex: number) => {
     setAnswers(prev => {
       const existing = prev[questionId] || [];
@@ -42,6 +60,16 @@ const Quiz: React.FC = () => {
       const next = exists ? existing.filter(i => i !== answerIndex) : [...existing, answerIndex];
       // Keep sorted for stable comparison/UI
       next.sort((a, b) => a - b);
+      
+      // Check result immediately after answer change
+      const result = checkQuestionResult(questionId, next);
+      if (result) {
+        setQuestionResults(prev => ({
+          ...prev,
+          [questionId]: result
+        }));
+      }
+      
       return { ...prev, [questionId]: next };
     });
   };
@@ -58,17 +86,16 @@ const Quiz: React.FC = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    try {
-      setSubmitting(true);
-      const results = await quizApi.gradeQuiz(answers, module, seed);
-      setQuizResults(results);
-    } catch (err) {
-      setError('Không thể chấm điểm. Vui lòng thử lại.');
-      console.error('Error grading quiz:', err);
-    } finally {
-      setSubmitting(false);
-    }
+  const handleFinish = () => {
+    // Calculate final score
+    const totalQuestions = questions.length;
+    const correctAnswers = Object.values(questionResults).filter((result: any) => result.isCorrect).length;
+    const percentage = Math.round((correctAnswers / totalQuestions) * 100);
+    
+    alert(`Bài thi hoàn thành!\nKết quả: ${correctAnswers}/${totalQuestions} (${percentage}%)\n${percentage >= 70 ? 'Chúc mừng! Bạn đã vượt qua!' : 'Cần cố gắng thêm nhé!'}`);
+    
+    // Navigate back to home
+    navigate('/');
   };
 
   const handleRetry = () => {
@@ -128,108 +155,6 @@ const Quiz: React.FC = () => {
     );
   }
 
-  // Show results after submission
-  if (quizResults) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100">
-        <div className="container mx-auto px-4 py-16">
-          <div className="max-w-4xl mx-auto">
-            {/* Results Header */}
-            <div className="bg-white rounded-lg shadow-lg p-8 mb-8 text-center">
-              <div className="text-6xl mb-4">
-                {quizResults.percentage >= 70 ? '🎉' : '😔'}
-              </div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-4">
-                Kết quả bài thi
-              </h1>
-              <div className="text-4xl font-bold text-blue-600 mb-2">
-                {quizResults.score}/{quizResults.total}
-              </div>
-              <div className="text-2xl text-gray-600 mb-4">
-                ({quizResults.percentage}%)
-              </div>
-              <div className={`text-lg font-medium ${quizResults.percentage >= 70 ? 'text-green-600' : 'text-red-600'}`}>
-                {quizResults.percentage >= 70 ? 'Chúc mừng! Bạn đã vượt qua bài thi!' : 'Cần cố gắng thêm nhé!'}
-              </div>
-            </div>
-
-            {/* Detailed Results */}
-            <div className="space-y-6">
-              {quizResults.results.map((result, index) => (
-                <div key={result.questionId} className="bg-white rounded-lg shadow-lg p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800 flex-1">
-                      Câu {index + 1}: {result.questionText}
-                    </h3>
-                    <div className={`ml-4 px-3 py-1 rounded-full text-sm font-medium ${
-                      result.isCorrect 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {result.isCorrect ? 'ĐÚNG 😊' : 'SAI ☹️'}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    {result.options.map((option, optionIndex) => {
-                      const correctSet = new Set(result.correctAnswer || []);
-                      const userSet = new Set(result.userAnswer || []);
-
-                      let bgColor = 'bg-gray-50';
-                      let textColor = 'text-gray-700';
-                      let borderColor = 'border-gray-200';
-
-                      const isCorrectOption = correctSet.has(optionIndex);
-                      const isUserSelected = userSet.has(optionIndex);
-
-                      if (isCorrectOption) {
-                        bgColor = 'bg-green-100';
-                        textColor = 'text-green-800';
-                        borderColor = 'border-green-300';
-                      } else if (!result.isCorrect && isUserSelected) {
-                        bgColor = 'bg-red-100';
-                        textColor = 'text-red-800';
-                        borderColor = 'border-red-300';
-                      }
-
-                      return (
-                        <div
-                          key={optionIndex}
-                          className={`p-3 rounded-lg border ${bgColor} ${textColor} ${borderColor}`}
-                        >
-                          <span className="font-medium">{String.fromCharCode(65 + optionIndex)}.</span> {option}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
-                    <strong>Giải thích:</strong> {result.explanation}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-center space-x-4 mt-8">
-              <button
-                onClick={handleRetry}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-              >
-                🔄 Làm lại
-              </button>
-              <button
-                onClick={handleBackToHome}
-                className="bg-gray-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
-              >
-                🏠 Về trang chủ
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Show quiz interface
   const currentQuestion = questions[currentQuestionIndex];
@@ -276,34 +201,71 @@ const Quiz: React.FC = () => {
             </h2>
 
             <div className="space-y-3">
-              {currentQuestion.options.map((option, index) => (
-                <label
-                  key={index}
-                  className={`flex items-center p-4 border rounded-lg cursor-pointer transition-colors ${
-                    (answers[currentQuestion.id] || []).includes(index)
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    name={`question-${currentQuestion.id}`}
-                    value={index}
-                    checked={(answers[currentQuestion.id] || []).includes(index)}
-                    onChange={() => handleToggleAnswer(currentQuestion.id, index)}
-                    className="mr-4 h-5 w-5 text-blue-600"
-                  />
-                  <span className="font-medium text-gray-800 mr-2">
-                    {String.fromCharCode(65 + index)}.
-                  </span>
-                  <span className="text-gray-700">{option}</span>
-                </label>
-              ))}
+              {currentQuestion.options.map((option, index) => {
+                const currentResult = questionResults[currentQuestion.id];
+                const isUserSelected = (answers[currentQuestion.id] || []).includes(index);
+                const isCorrectAnswer = currentResult?.correctAnswer?.includes(index);
+                const isWrongAnswer = currentResult && !currentResult.isCorrect && isUserSelected && !isCorrectAnswer;
+                
+                let optionClasses = "flex items-center p-4 border rounded-lg transition-colors";
+                if (currentResult) {
+                  if (isCorrectAnswer) {
+                    optionClasses += " bg-green-200 text-green-800 border-green-300";
+                  } else if (isWrongAnswer) {
+                    optionClasses += " bg-red-200 text-red-800 border-red-300";
+                  } else {
+                    optionClasses += " bg-gray-50 text-gray-700 border-gray-200";
+                  }
+                } else {
+                  optionClasses += isUserSelected 
+                    ? " border-blue-500 bg-blue-50 cursor-pointer hover:bg-blue-100"
+                    : " border-gray-200 hover:bg-gray-50 cursor-pointer";
+                }
+
+                return (
+                  <label
+                    key={index}
+                    className={optionClasses}
+                  >
+                    <input
+                      type="checkbox"
+                      name={`question-${currentQuestion.id}`}
+                      value={index}
+                      checked={isUserSelected}
+                      onChange={() => handleToggleAnswer(currentQuestion.id, index)}
+                      disabled={!!currentResult}
+                      className="mr-4 h-5 w-5 text-blue-600"
+                    />
+                    <span className="font-medium text-gray-800 mr-2">
+                      {String.fromCharCode(65 + index)}.
+                    </span>
+                    <span className="text-gray-700">{option}</span>
+                  </label>
+                );
+              })}
             </div>
+
+            {/* Show immediate result */}
+            {questionResults[currentQuestion.id] && (
+              <div className="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <span className={`text-lg font-medium ${
+                    questionResults[currentQuestion.id].isCorrect 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    {questionResults[currentQuestion.id].isCorrect ? '✅ Đúng!' : '❌ Sai!'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-700">
+                  <strong>Giải thích:</strong> {questionResults[currentQuestion.id].explanation}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Navigation */}
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
             <button
               onClick={handlePrevious}
               disabled={currentQuestionIndex === 0}
@@ -312,7 +274,7 @@ const Quiz: React.FC = () => {
               ← Câu trước
             </button>
 
-            <div className="flex flex-wrap gap-2 justify-center mt-6">
+            <div className="flex flex-wrap gap-2 justify-center">
               {questions.map((q, i) => (
                 <button
                   key={i}
@@ -320,8 +282,10 @@ const Quiz: React.FC = () => {
                   className={`w-10 h-10 rounded-full text-sm flex items-center justify-center transition-colors ${
                     i === currentQuestionIndex
                       ? 'bg-purple-600 text-white'
-                      : answers[q.id] !== undefined
-                      ? 'bg-green-500 text-white'
+                      : questionResults[q.id]
+                      ? questionResults[q.id].isCorrect
+                        ? 'bg-green-500 text-white'
+                        : 'bg-red-500 text-white'
                       : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                   }`}
                 >
@@ -332,11 +296,10 @@ const Quiz: React.FC = () => {
 
             {currentQuestionIndex === questions.length - 1 ? (
               <button
-                onClick={handleSubmit}
-                disabled={submitting || answeredQuestions === 0}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                onClick={handleFinish}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors"
               >
-                {submitting ? 'Đang chấm điểm...' : 'Nộp bài'}
+                🏁 Hoàn thành
               </button>
             ) : (
               <button

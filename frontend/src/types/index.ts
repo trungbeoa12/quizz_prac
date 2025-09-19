@@ -3,6 +3,8 @@ export interface Question {
   module: string;
   text: string;
   options: string[];
+  correctIndexes: number[];
+  explanation: string;
 }
 
 export interface QuizResult {
